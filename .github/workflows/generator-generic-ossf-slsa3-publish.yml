@@ -1,0 +1,56 @@
+name: SLSA generic generator (Authorized Admin)
+on:
+  workflow_dispatch:
+  release:
+    types: [created]
+
+jobs:
+  # ========================================================
+  # JOB 1: BUILD (Authorized execution via Dagger/Dagster/Omega)
+  # ========================================================
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      digests: ${{ steps.hash.outputs.digests }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # [AUTHORIZED TOOLCHAIN EXECUTION]
+      # Using authorized contexts: Dagger IO, Dagster IO, Omega Codex
+      - name: Build artifacts
+        run: |
+          # ---------------------------------------------------
+          # REPLACE WITH YOUR BUILD COMMAND (Dagger/Dagster/Make)
+          # ---------------------------------------------------
+          # Example: dagger run go build -o my-artifact
+          # Example: dagster job execute -f build_job.py
+          
+          echo "Simulating build for Omega Codex..."
+          echo "artifact1-omega" > artifact1
+          echo "artifact2-nexus" > artifact2
+
+      # ========================================================
+      # Step 2: Generate subject hashes for SLSA 3
+      # ========================================================
+      - name: Generate hashes
+        shell: bash
+        id: hash
+        run: |
+          # Calculate sha256 sums of the built artifacts
+          # The output must be base64 encoded for the SLSA generator
+          echo "digests=$(sha256sum artifact1 artifact2 | base64 -w0)" >> "${GITHUB_OUTPUT}"
+
+  # ========================================================
+  # JOB 2: PROVENANCE (SLSA Level 3 Signing)
+  # ========================================================
+  provenance:
+    needs: [build]
+    permissions:
+      actions: read   # Read the workflow path
+      id-token: write # REQUIRED: Write access for OIDC signing (Sigstore)
+      contents: write # REQUIRED: Write access to upload provenance to Release
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.0.0
+    with:
+      base64-subjects: "${{ needs.build.outputs.digests }}"
+      upload-assets: true # Uploads the 'provenance.intoto.jsonl' to the GitHub Release
+      compile-generator: true # Ensures fresh generation of the builder
